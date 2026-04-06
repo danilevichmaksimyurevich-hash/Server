@@ -1,5 +1,4 @@
-﻿using Client;
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Net.Sockets;
@@ -25,6 +24,7 @@ namespace ModernClient
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            // Анимация появления
             var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.5));
             this.BeginAnimation(OpacityProperty, fadeIn);
         }
@@ -50,6 +50,17 @@ namespace ModernClient
         {
             btnSend.IsEnabled = false;
 
+            // Анимация кнопки
+            var animation = new DoubleAnimation(0.95, TimeSpan.FromMilliseconds(100))
+            {
+                AutoReverse = true
+            };
+            btnSend.RenderTransform = new ScaleTransform();
+            btnSend.RenderTransform.BeginAnimation(ScaleTransform.ScaleXProperty, animation);
+            btnSend.RenderTransform.BeginAnimation(ScaleTransform.ScaleYProperty, animation);
+
+            await Task.Delay(100);
+
             tbResult.Text = "⏳ Отправка данных...\n";
 
             try
@@ -58,53 +69,23 @@ namespace ModernClient
                 byte facultyId = GetFacultyId();
                 byte eduForm = GetEduForm();
 
-                tbResult.Text += $"Факультет: {facultyId}, Форма обучения: {(eduForm == 1 ? "Очная" : "Заочная")}\n\n";
-
                 // Получение ответов
                 byte[] answers = new byte[8];
-
-                for (int i = 0; i < questionsItemsControl.Items.Count; i++)
+                for (int i = 0; i < questions.Count; i++)
                 {
                     var container = questionsItemsControl.ItemContainerGenerator.ContainerFromIndex(i) as ContentPresenter;
                     if (container != null)
                     {
                         var comboBox = FindVisualChild<ComboBox>(container);
-                        if (comboBox != null && comboBox.SelectedItem is ComboBoxItem selectedItem)
+                        if (comboBox?.SelectedItem is ComboBoxItem selectedItem)
                         {
-                            string tagValue = selectedItem.Tag.ToString();
-                            if (byte.TryParse(tagValue, out byte answerValue))
-                            {
-                                answers[i] = answerValue;
-                            }
-                            else
-                            {
-                                answers[i] = 0;
-                            }
+                            answers[i] = byte.Parse(selectedItem.Tag.ToString());
                         }
                         else
                         {
                             answers[i] = 0;
                         }
                     }
-                    else
-                    {
-                        answers[i] = 0;
-                    }
-                }
-
-                // Отображение выбранных ответов
-                tbResult.Text += "Выбранные ответы:\n";
-                for (int i = 0; i < answers.Length; i++)
-                {
-                    string answerText = answers[i] switch
-                    {
-                        0 => "Удовлетворён",
-                        1 => "Скорее удовлетворён",
-                        2 => "Скорее не удовлетворён",
-                        3 => "Не удовлетворён",
-                        _ => "Неизвестно"
-                    };
-                    tbResult.Text += $"  Вопрос {i + 1}: {answers[i]} - {answerText}\n";
                 }
 
                 // Формирование заголовка
@@ -123,11 +104,6 @@ namespace ModernClient
                 data[1] = (byte)(answersBits & 0xFF);
                 data[2] = (byte)((answersBits >> 8) & 0xFF);
 
-                tbResult.Text += $"\nОтправляемые данные (3 байта):\n";
-                tbResult.Text += $"  Байт 0 (заголовок): {data[0]} (0x{data[0]:X2})\n";
-                tbResult.Text += $"  Байт 1 (ответы 1-4): {data[1]} (0x{data[1]:X2})\n";
-                tbResult.Text += $"  Байт 2 (ответы 5-8): {data[2]} (0x{data[2]:X2})\n\n";
-
                 // Отправка на сервер
                 string serverResponse = await SendToServer(data);
 
@@ -136,10 +112,8 @@ namespace ModernClient
                 if (serverResponse == "OK")
                 {
                     tbResult.Text += "\n✅ Ответы успешно отправлены!";
-                }
-                else if (serverResponse == "Server paused")
-                {
-                    tbResult.Text += "\n⚠️ Сервер на паузе. Попробуйте позже.";
+                    await Task.Delay(1000);
+                    ClearAnswers();
                 }
                 else
                 {
@@ -148,7 +122,7 @@ namespace ModernClient
             }
             catch (Exception ex)
             {
-                tbResult.Text += $"\n❌ Ошибка: {ex.Message}\n";
+                tbResult.Text += $"\n❌ Ошибка: {ex.Message}";
                 MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -190,28 +164,42 @@ namespace ModernClient
 
         private byte GetFacultyId()
         {
-            if (cmbFaculty.SelectedItem is ComboBoxItem selectedItem)
+            if (cmbFaculty.SelectedItem is ComboBoxItem selectedItem && selectedItem.Tag != null)
             {
-                string tagValue = selectedItem.Tag?.ToString();
-                if (byte.TryParse(tagValue, out byte facultyId))
-                {
-                    return facultyId;
-                }
+                return byte.Parse(selectedItem.Tag.ToString());
             }
             return 0;
         }
 
         private byte GetEduForm()
         {
-            if (cmbEduForm.SelectedItem is ComboBoxItem selectedItem)
+            if (cmbEduForm.SelectedItem is ComboBoxItem selectedItem && selectedItem.Tag != null)
             {
-                string tagValue = selectedItem.Tag?.ToString();
-                if (byte.TryParse(tagValue, out byte eduForm))
-                {
-                    return eduForm;
-                }
+                return byte.Parse(selectedItem.Tag.ToString());
             }
             return 1;
+        }
+
+        private void ClearAnswers()
+        {
+            foreach (var question in questions)
+            {
+                question.Answer = 0;
+            }
+
+            // Сброс ComboBox в первое значение
+            for (int i = 0; i < questions.Count; i++)
+            {
+                var container = questionsItemsControl.ItemContainerGenerator.ContainerFromIndex(i) as ContentPresenter;
+                if (container != null)
+                {
+                    var comboBox = FindVisualChild<ComboBox>(container);
+                    if (comboBox != null)
+                    {
+                        comboBox.SelectedIndex = 0;
+                    }
+                }
+            }
         }
 
         private T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
@@ -227,12 +215,6 @@ namespace ModernClient
                     return descendant;
             }
             return null;
-        }
-
-        private void btnAdmin_Click(object sender, RoutedEventArgs e)
-        {
-            var adminWindow = new AdminWindow();
-            adminWindow.ShowDialog();
         }
     }
 

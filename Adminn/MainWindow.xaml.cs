@@ -6,7 +6,6 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media.Animation;
 
 namespace ModernClient
 {
@@ -24,7 +23,8 @@ namespace ModernClient
 
         private void AdminWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.5));
+            var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1,
+                TimeSpan.FromSeconds(0.5));
             this.BeginAnimation(OpacityProperty, fadeIn);
         }
 
@@ -52,15 +52,13 @@ namespace ModernClient
                     var selectedFaculty = cmbStatsFaculty.SelectedItem as ComboBoxItem;
                     if (selectedFaculty != null)
                     {
-                        string tagValue = selectedFaculty.Tag.ToString();
-                        byte.TryParse(tagValue, out facultyId);
+                        facultyId = byte.Parse(selectedFaculty.Tag.ToString());
                     }
 
                     var selectedForm = cmbStatsForm.SelectedItem as ComboBoxItem;
                     if (selectedForm != null)
                     {
-                        string tagValue = selectedForm.Tag.ToString();
-                        byte.TryParse(tagValue, out eduForm);
+                        eduForm = byte.Parse(selectedForm.Tag.ToString());
                     }
                 }
 
@@ -147,18 +145,11 @@ namespace ModernClient
                     byte eduForm = 0;
 
                     var selectedFaculty = cmbStatsFaculty.SelectedItem as ComboBoxItem;
-                    if (selectedFaculty != null)
+                    if (selectedFaculty != null && selectedFaculty.Tag.ToString() != "31")
                     {
-                        string tagValue = selectedFaculty.Tag.ToString();
-                        if (tagValue != "31")
-                        {
-                            byte.TryParse(tagValue, out facultyId);
-                            var selectedForm = cmbStatsForm.SelectedItem as ComboBoxItem;
-                            if (selectedForm != null)
-                            {
-                                byte.TryParse(selectedForm.Tag.ToString(), out eduForm);
-                            }
-                        }
+                        facultyId = byte.Parse(selectedFaculty.Tag.ToString());
+                        var selectedForm = cmbStatsForm.SelectedItem as ComboBoxItem;
+                        eduForm = byte.Parse(selectedForm?.Tag.ToString() ?? "1");
                     }
 
                     byte operationId = 2;
@@ -178,6 +169,7 @@ namespace ModernClient
                             MessageBox.Show($"Результат: {response}", "Сброс статистики",
                                 MessageBoxButton.OK, MessageBoxImage.Information);
 
+                            // Обновляем статистику после сброса
                             await LoadStatistics(false);
                         }
                     }

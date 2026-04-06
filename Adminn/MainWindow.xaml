@@ -177,6 +177,7 @@
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
 
+                                                <!-- Удовлетворён -->
                                                 <Border Grid.Column="0" Background="#4CAF50" CornerRadius="6" 
                                                         Padding="10" Margin="5">
                                                     <StackPanel>
@@ -188,6 +189,7 @@
                                                     </StackPanel>
                                                 </Border>
 
+                                                <!-- Скорее удовлетворён -->
                                                 <Border Grid.Column="1" Background="#8BC34A" CornerRadius="6" 
                                                         Padding="10" Margin="5">
                                                     <StackPanel>
@@ -199,6 +201,7 @@
                                                     </StackPanel>
                                                 </Border>
 
+                                                <!-- Скорее не удовлетворён -->
                                                 <Border Grid.Column="2" Background="#FF9800" CornerRadius="6" 
                                                         Padding="10" Margin="5">
                                                     <StackPanel>
@@ -210,6 +213,7 @@
                                                     </StackPanel>
                                                 </Border>
 
+                                                <!-- Не удовлетворён -->
                                                 <Border Grid.Column="3" Background="#F44336" CornerRadius="6" 
                                                         Padding="10" Margin="5">
                                                     <StackPanel>

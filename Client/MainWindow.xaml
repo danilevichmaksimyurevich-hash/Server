@@ -6,6 +6,7 @@
         Background="#F0F4F8">
 
     <Window.Resources>
+        <!-- Стили для современного дизайна -->
         <Style x:Key="ModernButton" TargetType="Button">
             <Setter Property="Background" Value="#2196F3"/>
             <Setter Property="Foreground" Value="White"/>
@@ -44,6 +45,26 @@
             <Setter Property="BorderBrush" Value="#BDBDBD"/>
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
+
+        <Style x:Key="ModernTextBox" TargetType="TextBox">
+            <Setter Property="Height" Value="35"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#BDBDBD"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,5"/>
+        </Style>
+
+        <Storyboard x:Key="FadeIn">
+            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                           From="0" To="1" Duration="0:0:0.5"/>
+        </Storyboard>
+
+        <Storyboard x:Key="SlideUp">
+            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                           From="20" To="0" Duration="0:0:0.3"/>
+        </Storyboard>
     </Window.Resources>
 
     <Grid>
@@ -66,7 +87,16 @@
         <!-- Основное содержимое -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" 
                       HorizontalScrollBarVisibility="Disabled" Padding="20">
-            <StackPanel>
+            <StackPanel RenderTransformOrigin="0.5,0">
+                <StackPanel.RenderTransform>
+                    <TranslateTransform/>
+                </StackPanel.RenderTransform>
+                <StackPanel.Triggers>
+                    <EventTrigger RoutedEvent="StackPanel.Loaded">
+                        <BeginStoryboard Storyboard="{StaticResource SlideUp}"/>
+                    </EventTrigger>
+                </StackPanel.Triggers>
+
                 <!-- Карточка параметров -->
                 <Border Background="White" CornerRadius="10" Padding="20" Margin="0,0,0,20"
                         BorderBrush="#E0E0E0" BorderThickness="1">
@@ -128,9 +158,9 @@
                                                        TextWrapping="Wrap" Margin="0,5,15,5"/>
 
                                             <ComboBox Grid.Column="1" x:Name="cmbAnswer" 
+                                                      SelectedValue="{Binding Answer}"
                                                       Style="{StaticResource ModernComboBox}"
-                                                      Width="200" HorizontalAlignment="Left"
-                                                      SelectedIndex="0">
+                                                      Width="200" HorizontalAlignment="Left">
                                                 <ComboBoxItem Content="Удовлетворён" Tag="0"/>
                                                 <ComboBoxItem Content="Скорее удовлетворён" Tag="1"/>
                                                 <ComboBoxItem Content="Скорее не удовлетворён" Tag="2"/>
@@ -146,14 +176,8 @@
 
                 <!-- Кнопка отправки -->
                 <Button x:Name="btnSend" Content="ОТПРАВИТЬ ОТВЕТЫ" 
-                        Style="{StaticResource ModernButton}" Margin="0,10,0,10"
+                        Style="{StaticResource ModernButton}" Margin="0,10,0,20"
                         Click="btnSend_Click"/>
-
-                <!-- Кнопка администратора -->
-                <Button x:Name="btnAdmin" Content="👨‍💼 АДМИНИСТРИРОВАНИЕ" 
-                        Style="{StaticResource ModernButton}" 
-                        Background="#9C27B0" Margin="0,10,0,20"
-                        Click="btnAdmin_Click"/>
 
                 <!-- Результат -->
                 <Border Background="White" CornerRadius="10" Padding="15" Margin="0,0,0,20"
