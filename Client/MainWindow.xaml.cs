@@ -1,255 +1,262 @@
-﻿using System;
+﻿using Client;
+using System;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 
-namespace Client
+namespace ModernClient
 {
     public partial class MainWindow : Window
     {
+        private ObservableCollection<QuestionModel> questions;
+
         public MainWindow()
         {
             InitializeComponent();
-            // Создаем поля для 8 вопросов
-            CreateAnswerFields();
+            InitializeQuestions();
+            this.Loaded += MainWindow_Loaded;
         }
 
-        private void CreateAnswerFields()
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // Создаем StackPanel для вопросов, если его нет
-            var questionsPanel = new System.Windows.Controls.StackPanel();
+            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.5));
+            this.BeginAnimation(OpacityProperty, fadeIn);
+        }
 
-            for (int i = 1; i <= 8; i++)
+        private void InitializeQuestions()
+        {
+            questions = new ObservableCollection<QuestionModel>
             {
-                var panel = new System.Windows.Controls.StackPanel()
-                {
-                    Orientation = System.Windows.Controls.Orientation.Horizontal,
-                    Margin = new Thickness(5)
-                };
+                new QuestionModel { Text = "1. Удовлетворены ли вы качеством преподавания?" },
+                new QuestionModel { Text = "2. Оцените доступность учебных материалов" },
+                new QuestionModel { Text = "3. Насколько эффективна обратная связь с преподавателями?" },
+                new QuestionModel { Text = "4. Удовлетворены ли вы техническим оснащением аудиторий?" },
+                new QuestionModel { Text = "5. Оцените качество организации практических занятий" },
+                new QuestionModel { Text = "6. Насколько комфортна психологическая атмосфера?" },
+                new QuestionModel { Text = "7. Удовлетворены ли вы работой деканата?" },
+                new QuestionModel { Text = "8. Оцените качество учебных программ в целом" }
+            };
 
-                var label = new System.Windows.Controls.Label()
-                {
-                    Content = $"Вопрос {i}:",
-                    Width = 80,
-                    Margin = new Thickness(5)
-                };
-
-                var textBox = new System.Windows.Controls.TextBox()
-                {
-                    Name = $"txtAnswer{i}",
-                    Width = 50,
-                    Margin = new Thickness(5),
-                    Text = "0"
-                };
-
-                panel.Children.Add(label);
-                panel.Children.Add(textBox);
-                questionsPanel.Children.Add(panel);
-            }
-
-            // Добавляем панель в окно (нужно разместить в нужном месте XAML)
-            // Для примера, предполагаем что есть StackPanel с именем QuestionsContainer
-            if (this.FindName("QuestionsContainer") is System.Windows.Controls.StackPanel container)
-            {
-                container.Children.Add(questionsPanel);
-            }
+            questionsItemsControl.ItemsSource = questions;
         }
 
         private async void btnSend_Click(object sender, RoutedEventArgs e)
         {
             btnSend.IsEnabled = false;
-            tbResult.Text = "Отправка...\n";
+
+            tbResult.Text = "⏳ Отправка данных...\n";
 
             try
             {
-                // 1. ID операции (всегда 01 для отправки ответов)
-                byte operationId = 0b01; // 2 бита
+                // Получение параметров
+                byte facultyId = GetFacultyId();
+                byte eduForm = GetEduForm();
 
-                // 2. Чтение ID факультета (0-31)
-                if (!byte.TryParse(txtFacultyId.Text, out byte facultyId) || facultyId > 31)
-                {
-                    tbResult.Text = "Ошибка: ID факультета должен быть целым числом от 0 до 31";
-                    return;
-                }
+                tbResult.Text += $"Факультет: {facultyId}, Форма обучения: {(eduForm == 1 ? "Очная" : "Заочная")}\n\n";
 
-                // 3. Форма обучения (0 или 1)
-                byte eduForm = (byte)(cbEducationForm.SelectedIndex == 0 ? 0 : 1);
-
-                // 4. Чтение 8 ответов (каждый от 0 до 3)
+                // Получение ответов
                 byte[] answers = new byte[8];
-                for (int i = 0; i < 8; i++)
-                {
-                    var box = FindName($"txtAnswer{i + 1}") as System.Windows.Controls.TextBox;
-                    if (box == null)
-                    {
-                        tbResult.Text = $"Внутренняя ошибка: не найдено поле для вопроса {i + 1}";
-                        return;
-                    }
 
-                    if (!byte.TryParse(box.Text, out byte val))
+                for (int i = 0; i < questionsItemsControl.Items.Count; i++)
+                {
+                    var container = questionsItemsControl.ItemContainerGenerator.ContainerFromIndex(i) as ContentPresenter;
+                    if (container != null)
                     {
-                        tbResult.Text = $"Ошибка: вопрос {i + 1} должен содержать целое число";
-                        return;
+                        var comboBox = FindVisualChild<ComboBox>(container);
+                        if (comboBox != null && comboBox.SelectedItem is ComboBoxItem selectedItem)
+                        {
+                            string tagValue = selectedItem.Tag.ToString();
+                            if (byte.TryParse(tagValue, out byte answerValue))
+                            {
+                                answers[i] = answerValue;
+                            }
+                            else
+                            {
+                                answers[i] = 0;
+                            }
+                        }
+                        else
+                        {
+                            answers[i] = 0;
+                        }
                     }
-                    if (val > 3)
+                    else
                     {
-                        tbResult.Text = $"Ошибка: вопрос {i + 1} — значение не может быть больше 3";
-                        return;
+                        answers[i] = 0;
                     }
-                    answers[i] = val;
                 }
 
-                // 5. Упаковка данных в 3 байта:
-                //    Байт 0: [2 бита operationId | 5 бит facultyId | 1 бит eduForm]
-                //    Байты 1-2: 8 вопросов по 2 бита (всего 16 бит)
+                // Отображение выбранных ответов
+                tbResult.Text += "Выбранные ответы:\n";
+                for (int i = 0; i < answers.Length; i++)
+                {
+                    string answerText = answers[i] switch
+                    {
+                        0 => "Удовлетворён",
+                        1 => "Скорее удовлетворён",
+                        2 => "Скорее не удовлетворён",
+                        3 => "Не удовлетворён",
+                        _ => "Неизвестно"
+                    };
+                    tbResult.Text += $"  Вопрос {i + 1}: {answers[i]} - {answerText}\n";
+                }
 
-                byte[] data = new byte[3];
+                // Формирование заголовка
+                byte operationId = 0;
+                byte header = (byte)((operationId << 6) | (facultyId << 1) | eduForm);
 
-                // Упаковка первого байта: operationId (2 бита) + facultyId (5 бит) + eduForm (1 бит)
-                // Формат: [op1][op0][fac4][fac3][fac2][fac1][fac0][form]
-                data[0] = (byte)((operationId << 6) | (facultyId << 1) | eduForm);
-
-                // Упаковка ответов в 16 бит (байты 1 и 2)
-                // Каждый вопрос занимает 2 бита
+                // Упаковка ответов
                 ushort answersBits = 0;
                 for (int i = 0; i < 8; i++)
                 {
                     answersBits |= (ushort)(answers[i] << (i * 2));
                 }
 
-                // Записываем в little-endian формате (младший байт первый)
-                data[1] = (byte)(answersBits & 0xFF);        // Младшие 8 бит
-                data[2] = (byte)((answersBits >> 8) & 0xFF); // Старшие 8 бит
+                byte[] data = new byte[3];
+                data[0] = header;
+                data[1] = (byte)(answersBits & 0xFF);
+                data[2] = (byte)((answersBits >> 8) & 0xFF);
 
-                // === ДЕТАЛЬНОЕ ОТОБРАЖЕНИЕ ОТПРАВЛЯЕМЫХ ДАННЫХ ===
-                StringBuilder sb = new StringBuilder();
-                sb.AppendLine("╔══════════════════════════════════════════════════════════════╗");
-                sb.AppendLine("║              ОТПРАВЛЯЕМЫЕ ДАННЫЕ (3 БАЙТА)                  ║");
-                sb.AppendLine("╚══════════════════════════════════════════════════════════════╝\n");
+                tbResult.Text += $"\nОтправляемые данные (3 байта):\n";
+                tbResult.Text += $"  Байт 0 (заголовок): {data[0]} (0x{data[0]:X2})\n";
+                tbResult.Text += $"  Байт 1 (ответы 1-4): {data[1]} (0x{data[1]:X2})\n";
+                tbResult.Text += $"  Байт 2 (ответы 5-8): {data[2]} (0x{data[2]:X2})\n\n";
 
-                // Отображение сырых байтов
-                sb.AppendLine("СЫРЫЕ БАЙТЫ:");
-                for (int i = 0; i < data.Length; i++)
+                // Отправка на сервер
+                string serverResponse = await SendToServer(data);
+
+                tbResult.Text += $"📡 Ответ сервера: {serverResponse}\n";
+
+                if (serverResponse == "OK")
                 {
-                    sb.AppendLine($"  Байт[{i}]: DEC={data[i],3} | HEX=0x{data[i]:X2} | BIN={Convert.ToString(data[i], 2).PadLeft(8, '0')}");
+                    tbResult.Text += "\n✅ Ответы успешно отправлены!";
                 }
-
-                // Разбор первого байта
-                sb.AppendLine("\n╔══════════════════════════════════════════════════════════════╗");
-                sb.AppendLine("║                 РАЗБОР ПЕРВОГО БАЙТА                        ║");
-                sb.AppendLine("╚══════════════════════════════════════════════════════════════╝");
-
-                byte extractedOpId = (byte)((data[0] >> 6) & 0b11);
-                byte extractedFacultyId = (byte)((data[0] >> 1) & 0b11111);
-                byte extractedEduForm = (byte)(data[0] & 0b1);
-
-                sb.AppendLine($"  Бинарное представление: {Convert.ToString(data[0], 2).PadLeft(8, '0')}");
-                sb.AppendLine($"  ├─ Биты 7-6 (ID операции): {Convert.ToString(extractedOpId, 2).PadLeft(2, '0')} = {extractedOpId} (должно быть 01)");
-                sb.AppendLine($"  ├─ Биты 5-1 (ID факультета): {Convert.ToString(extractedFacultyId, 2).PadLeft(5, '0')} = {extractedFacultyId}");
-                sb.AppendLine($"  └─ Бит 0 (форма обучения): {extractedEduForm} = {(extractedEduForm == 1 ? "очная" : "заочная")}");
-
-                // Разбор ответов
-                sb.AppendLine("\n╔══════════════════════════════════════════════════════════════╗");
-                sb.AppendLine("║              РАЗБОР ОТВЕТОВ (16 БИТ = 8 ВОПРОСОВ)           ║");
-                sb.AppendLine("╚══════════════════════════════════════════════════════════════╝");
-
-                ushort receivedAnswersBits = (ushort)(data[1] | (data[2] << 8));
-                sb.AppendLine($"  Байт 1 (младший): {Convert.ToString(data[1], 2).PadLeft(8, '0')}");
-                sb.AppendLine($"  Байт 2 (старший): {Convert.ToString(data[2], 2).PadLeft(8, '0')}");
-                sb.AppendLine($"  Объединенное значение (16 бит): {Convert.ToString(receivedAnswersBits, 2).PadLeft(16, '0')}");
-                sb.AppendLine();
-
-                sb.AppendLine("  ПОБИТОВЫЙ РАЗБОР ОТВЕТОВ:");
-                for (int i = 0; i < 8; i++)
+                else if (serverResponse == "Server paused")
                 {
-                    int answer = (receivedAnswersBits >> (i * 2)) & 0b11;
-                    int startBit = i * 2;
-                    sb.AppendLine($"    Вопрос {i + 1}: биты {startBit}-{startBit + 1} = {Convert.ToString(answer, 2).PadLeft(2, '0')} = {answer}");
+                    tbResult.Text += "\n⚠️ Сервер на паузе. Попробуйте позже.";
                 }
-
-                // Проверка корректности упаковки
-                sb.AppendLine("\n╔══════════════════════════════════════════════════════════════╗");
-                sb.AppendLine("║              ПРОВЕРКА КОРРЕКТНОСТИ УПАКОВКИ                ║");
-                sb.AppendLine("╚══════════════════════════════════════════════════════════════╝");
-
-                bool allCorrect = true;
-                for (int i = 0; i < 8; i++)
-                {
-                    int unpacked = (receivedAnswersBits >> (i * 2)) & 0b11;
-                    if (unpacked != answers[i])
-                    {
-                        sb.AppendLine($"  ✗ Вопрос {i + 1}: ожидалось {answers[i]}, получено {unpacked}");
-                        allCorrect = false;
-                    }
-                    else
-                    {
-                        sb.AppendLine($"  ✓ Вопрос {i + 1}: {answers[i]} → упаковано корректно");
-                    }
-                }
-
-                if (allCorrect)
-                    sb.AppendLine("\n  ✓ ВСЕ ДАННЫЕ УПАКОВАНЫ КОРРЕКТНО!");
                 else
-                    sb.AppendLine("\n  ✗ ОБНАРУЖЕНЫ ОШИБКИ УПАКОВКИ!");
-
-                tbResult.Text = sb.ToString();
-
-                // === ОТПРАВКА НА СЕРВЕР ===
-                tbResult.Text += "\n╔══════════════════════════════════════════════════════════════╗\n";
-                tbResult.Text += "║                    ОТПРАВКА НА СЕРВЕР                      ║\n";
-                tbResult.Text += "╚══════════════════════════════════════════════════════════════╝\n";
-
-                using (var tcpClient = new TcpClient())
                 {
-                    await tcpClient.ConnectAsync("127.0.0.1", 8080);
-                    tbResult.Text += $"✓ Подключение установлено\n";
-
-                    using (var networkStream = tcpClient.GetStream())
-                    {
-                        await networkStream.WriteAsync(data, 0, data.Length);
-                        tbResult.Text += $"✓ Отправлено {data.Length} байт данных\n";
-
-                        // Получаем ответ от сервера
-                        var buffer = new byte[1024];
-                        var received = new StringBuilder();
-                        int bytesRead;
-
-                        networkStream.ReadTimeout = 5000;
-
-                        tbResult.Text += "\n╔══════════════════════════════════════════════════════════════╗\n";
-                        tbResult.Text += "║                    ОТВЕТ СЕРВЕРА                         ║\n";
-                        tbResult.Text += "╚══════════════════════════════════════════════════════════════╝\n";
-
-                        do
-                        {
-                            bytesRead = await networkStream.ReadAsync(buffer, 0, buffer.Length);
-                            if (bytesRead > 0)
-                            {
-                                received.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
-                            }
-                        }
-                        while (bytesRead > 0);
-
-                        tbResult.Text += $"✓ Получен ответ: \"{received}\"\n";
-                    }
+                    tbResult.Text += $"\n⚠️ Сервер вернул: {serverResponse}";
                 }
-
-                tbResult.Text += "\n╔══════════════════════════════════════════════════════════════╗\n";
-                tbResult.Text += "║                    ОПЕРАЦИЯ ЗАВЕРШЕНА                      ║\n";
-                tbResult.Text += "╚══════════════════════════════════════════════════════════════╝";
             }
             catch (Exception ex)
             {
-                tbResult.Text = $"╔══════════════════════════════════════════════════════════════╗\n";
-                tbResult.Text += $"║                       ОШИБКА                               ║\n";
-                tbResult.Text += $"╚══════════════════════════════════════════════════════════════╝\n";
-                tbResult.Text += $"\n{ex.Message}";
+                tbResult.Text += $"\n❌ Ошибка: {ex.Message}\n";
+                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
                 btnSend.IsEnabled = true;
             }
+        }
+
+        private async Task<string> SendToServer(byte[] data)
+        {
+            using (var tcpClient = new TcpClient())
+            {
+                await tcpClient.ConnectAsync("10.30.167.83", 34543);
+                using (var networkStream = tcpClient.GetStream())
+                {
+                    await networkStream.WriteAsync(data, 0, data.Length);
+
+                    var buffer = new byte[1024];
+                    var response = new StringBuilder();
+                    int bytesRead;
+
+                    networkStream.ReadTimeout = 5000;
+
+                    do
+                    {
+                        bytesRead = await networkStream.ReadAsync(buffer, 0, buffer.Length);
+                        if (bytesRead > 0)
+                        {
+                            response.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
+                        }
+                    }
+                    while (bytesRead > 0);
+
+                    return response.ToString();
+                }
+            }
+        }
+
+        private byte GetFacultyId()
+        {
+            if (cmbFaculty.SelectedItem is ComboBoxItem selectedItem)
+            {
+                string tagValue = selectedItem.Tag?.ToString();
+                if (byte.TryParse(tagValue, out byte facultyId))
+                {
+                    return facultyId;
+                }
+            }
+            return 0;
+        }
+
+        private byte GetEduForm()
+        {
+            if (cmbEduForm.SelectedItem is ComboBoxItem selectedItem)
+            {
+                string tagValue = selectedItem.Tag?.ToString();
+                if (byte.TryParse(tagValue, out byte eduForm))
+                {
+                    return eduForm;
+                }
+            }
+            return 1;
+        }
+
+        private T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T result)
+                    return result;
+
+                var descendant = FindVisualChild<T>(child);
+                if (descendant != null)
+                    return descendant;
+            }
+            return null;
+        }
+
+        private void btnAdmin_Click(object sender, RoutedEventArgs e)
+        {
+            var adminWindow = new AdminWindow();
+            adminWindow.ShowDialog();
+        }
+    }
+
+    public class QuestionModel : INotifyPropertyChanged
+    {
+        private int _answer;
+
+        public string Text { get; set; }
+
+        public int Answer
+        {
+            get => _answer;
+            set
+            {
+                _answer = value;
+                OnPropertyChanged(nameof(Answer));
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }
